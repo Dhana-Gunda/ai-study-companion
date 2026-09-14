@@ -19,10 +19,13 @@
 
 ---
 
-## 2. Demo Video (3–5 Minutes)
+## 2. Demo Video (PRD Section 20 Core Learning Loop Walkthrough)
 
-- **Video Link:** [Insert Loom / YouTube / Google Drive Link Here]
-- **Walkthrough Script & 13-Step Flow:** Defined in detail in [`demo_script.md`](../demo_script.md):
+- **Interactive Video Player Page:**  
+  👉 [https://ai-study-companion-gamma.vercel.app/demo](https://ai-study-companion-gamma.vercel.app/demo)
+- **Direct Video Stream (WebM / HD):**  
+  👉 [https://ai-study-companion-gamma.vercel.app/demo_video.webm](https://ai-study-companion-gamma.vercel.app/demo_video.webm)
+- **Walkthrough Chapters & Script:** Defined in detail in [`demo_script.md`](../demo_script.md):
   1. *Stack Probe* (All Services Connected)
   2. *Create Space* (Domain namespace)
   3. *Create Project* (Goal definition)
