@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Database URLs (Support both DB_URL and DATABASE_URL)
     DB_URL: Optional[str] = None
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:password123@localhost:5432/study_companion"
+    DATABASE_URL: str = "postgresql+asyncpg://neondb_owner:npg_o3cAnKWSxZ0m@ep-red-glade-ayl3bdrs.c-5.us-east-2.aws.neon.tech/neondb"
 
     # Redis URL
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -52,10 +52,16 @@ class Settings(BaseSettings):
 
     @property
     def effective_db_url(self) -> str:
-        """Prefers DB_URL if explicitly provided, else DATABASE_URL, normalizing for asyncpg."""
-        import re
-        url = (self.DB_URL if self.DB_URL else self.DATABASE_URL).strip()
+        """Prefers env var DATABASE_URL or DB_URL, normalizing for asyncpg."""
+        import os, re
+        neon_fallback = "postgresql+asyncpg://neondb_owner:npg_o3cAnKWSxZ0m@ep-red-glade-ayl3bdrs.c-5.us-east-2.aws.neon.tech/neondb"
+        raw = os.environ.get("DATABASE_URL") or os.environ.get("DB_URL") or self.DB_URL or self.DATABASE_URL or neon_fallback
+        url = str(raw).strip()
         
+        # If in production and pointing to localhost, enforce Neon fallback
+        if "localhost" in url and (self.ENVIRONMENT == "production" or os.environ.get("ENVIRONMENT") == "production"):
+            url = neon_fallback
+            
         # Ensure postgresql+asyncpg driver prefix
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
