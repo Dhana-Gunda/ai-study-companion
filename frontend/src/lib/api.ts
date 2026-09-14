@@ -306,9 +306,30 @@ export async function getMaterialStatus(projectId: string, materialId: string): 
 // -------------------------------------------------------------
 export interface Citation {
   chunk_id?: string;
-  filename: string;
-  page_number: number;
+  filename?: string;
+  page_number?: number;
   similarity?: number;
+  guest?: string;
+  episode?: string;
+  timestamp?: string;
+  quote?: string;
+  score?: number;
+}
+
+export interface Artifact {
+  id?: string;
+  title: string;
+  artifact_type: "markdown" | "html";
+  content: string;
+}
+
+export interface Message {
+  id?: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  sources?: Citation[];
+  artifacts?: Artifact[];
+  created_at?: string;
 }
 
 export interface Conversation {
