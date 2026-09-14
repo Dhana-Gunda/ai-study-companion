@@ -17,15 +17,19 @@ logger = logging.getLogger("study_companion.main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan managing DB initialization and clean resource teardown."""
+    import asyncio
     logger.info(f"Initializing {settings.PROJECT_NAME} v{settings.VERSION}...")
     try:
-        await init_db()
+        await asyncio.wait_for(init_db(), timeout=5.0)
         logger.info("Database schemas and pgvector extension verified.")
     except Exception as e:
-        logger.error(f"Error during startup DB initialization: {e}", exc_info=True)
+        logger.warning(f"Startup DB initialization notice (app will continue): {e}")
     yield
     logger.info("Shutting down application resources...")
-    await close_redis_client()
+    try:
+        await close_redis_client()
+    except Exception:
+        pass
     logger.info("Teardown complete.")
 
 def create_app() -> FastAPI:
