@@ -72,6 +72,11 @@ export default function HomePage() {
               <BookOpen className="w-4 h-4 text-indigo-400" /> Open Sample Project
             </Button>
           </Link>
+          <Link href="/demo">
+            <Button size="lg" variant="outline" className="gap-2 border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40">
+              <Sparkles className="w-4 h-4 text-indigo-400" /> Watch Demo Video
+            </Button>
+          </Link>
           <Link href="/admin">
             <Button size="lg" variant="secondary" className="gap-2">
               <Shield className="w-4 h-4 text-zinc-300" /> Admin Dashboard

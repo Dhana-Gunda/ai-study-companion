@@ -21,3 +21,6 @@ powershell.cmd
 
 # VS Code
 .vscode/
+
+# Temp
+demo_video/
