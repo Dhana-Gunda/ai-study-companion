@@ -1,55 +1,26 @@
-# Video Demo Script (2–3 Minutes)
-## The Lenny Growth Assistant
+# Video Demo Script (3–5 Minutes)
+## AI Study Companion — Candidate Challenge Demonstration
 
-**Presenter:** Forward Deployed Engineer  
-**Setting:** Camera enabled, screen sharing application running on `http://localhost:3000` with terminal showing Ollama running locally.
-
----
-
-### [0:00 - 0:30] Scene 1: Problem Statement & Discovery Framing
-- **Visual:** Camera on face, then transition to browser showing The Lenny Growth Assistant interface.
-- **Script:**
-  > *"Hi everyone, I'm presenting The Lenny Growth Assistant—an AI copilot built for product and growth leaders to unlock the operational wisdom inside 200+ episodes of Lenny’s Podcast.*
-  >
-  > *The core problem we tackled is that knowledge from top tech operators like Shreyas Doshi, Elena Verna, and Brian Chesky is trapped in 500+ hours of audio. Generic LLMs hallucinate tactics without attribution, and converting insights into usable assets takes high prompt friction.*
-  >
-  > *Our solution gives teams strictly grounded answers with verified citations, a dedicated Ship 30 for 30 essay engine, and a Claude-style sandboxed Artifact Viewer."*
+**Live App URL:** [https://ai-study-companion-gamma.vercel.app/](https://ai-study-companion-gamma.vercel.app/)  
+**Backend Docs:** [https://ai-study-companion-backend-azlw.onrender.com/docs](https://ai-study-companion-backend-azlw.onrender.com/docs)  
+**GitHub:** [https://github.com/Dhana-Gunda/ai-study-companion](https://github.com/Dhana-Gunda/ai-study-companion)  
 
 ---
 
-### [0:30 - 1:15] Scene 2: Grounded Q&A & Local Ollama Execution
-- **Visual:** Point to the top navbar showing `Ollama: llama3.2:3b (Local)` active in green. Click the suggestion card: *"What does Elena Verna say about B2B Product-Led Growth, Product-Led Sales, and freemium retention?"*
-- **Script:**
-  > *"Notice first: I am running entirely on my local machine using Ollama with the llama3.2 3B parameter model—no external cloud calls, zero data egress.*
-  >
-  > *As the answer streams via Server-Sent Events, look at the citation badges at the bottom of the response. The assistant specifically cites Elena Verna from Episode 68 at timestamp 00:08:15 for freemium versus trial dynamics, and 00:15:05 for Product-Qualified Leads.*
-  >
-  > *If I were to ask an out-of-domain question, our strict cosine similarity threshold stops hallucination and politely informs the user that the podcast archive does not contain the answer."*
+### Step-by-Step Walkthrough Guide for Demo Video (PRD Section 20)
 
----
-
-### [1:15 - 1:55] Scene 3: Ship 30 for 30 Content Engine & Sandboxed Artifact Viewer
-- **Visual:** Switch mode to `Ship 30 for 30 Skill` and ask: *"Write a Ship 30 for 30 essay on Shreyas Doshi's LNO Framework."* Next, ask for an interactive ROI calculator in `Artifact Tool` mode. Show the right panel sliding open side-by-side.
-- **Script:**
-  > *"Next, let's explore our custom skills. Growth teams don't just want chat; they need shareable content and interactive tools.*
-  >
-  > *Here, our Ship 30 for 30 engine creates a ~1,250-word essay following the 1-3-1 sentence cadence, with bold visual anchors and clear operational takeaways.*
-  >
-  > *And when we request an interactive tool, the Claude-style Artifact Viewer opens side-by-side. You can see this interactive PLG ROI calculator rendered live in HTML and CSS.*
-  >
-  > *Crucially, for security: this is rendered inside a sandboxed iframe with `sandbox='allow-scripts'` and strictly omitting `allow-same-origin`. This guarantees that even untrusted generated HTML/JS cannot access parent cookies, local storage, or session tokens."*
-
----
-
-### [1:55 - 2:40] Scene 4: Key Technical Trade-Off & Operational Architecture
-- **Visual:** Briefly show the model toggle dropdown switching from `Ollama` to `Claude 3.5 Sonnet`, then show the terminal with `docker-compose.yml`.
-- **Script:**
-  > *"Now for the key technical trade-off: Local Model Independence versus Cloud Reasoning.*
-  >
-  > *Local 3B/8B models provide unmatched privacy and zero API costs, but they are more susceptible to context degradation on long dialogues. To solve this, we engineered a dialogue-aware chunker that injects episode and speaker headers into every chunk before embedding into pgvector.*
-  >
-  > *Furthermore, we built a zero-restart provider toggle. Evaluators can switch from Ollama to Claude 3.5 Sonnet or OpenAI GPT-4o right in the UI.*
-  >
-  > *Finally, the entire stack—PostgreSQL with pgvector, FastAPI, and Next.js—is deployable via a single `docker-compose up` command, with automated SQLite fallback for zero-dependency local runs.*
-  >
-  > *Thank you, and I look forward to your feedback!"*
+| Step # | Scene / Action | What to Show on Screen | What to Say (Script) |
+|---|---|---|---|
+| **1. Intro & Stack Connectivity** | Open Homepage | Show `https://ai-study-companion-gamma.vercel.app/`. Point to **Live Stack Connectivity Probe** with green checkmarks (PostgreSQL 16 + pgvector, Queue & Cache, All Services Connected). | *"Hello! Welcome to the AI Study Companion. As you can see on our live production homepage, our Next.js frontend is connected to a FastAPI backend backed by PostgreSQL 16 with pgvector on Neon and Redis."* |
+| **2. Create Space** | Click **"Spaces"** in nav | Click **"Create Space"** button. Name: `Computer Science`, Description: `Core CS & AI Foundations`. | *"First, we create a broad learning Space. A Space defines the high-level knowledge domain without rigid categories."* |
+| **3. Create Project** | Inside Space, click **"New Project"** | Project Name: `Intro to Machine Learning`, Learning Goal: `Master Supervised Learning and Gradient Descent`. Click Create. | *"Inside our Space, we create a focused learning Project with an explicit learning goal. The system enforces strict multi-tenant project isolation."* |
+| **4. Upload Material** | Open Project ➔ **Materials Tab** | Click **"Upload PDF"**. Select sample notes / paper. | *"Now we add learning materials. The system accepts PDFs and parses them asynchronously into semantic chunks with provenance."* |
+| **5. Process Material** | Show Material Status | The table shows status transition `PROCESSING` ➔ `READY` with page count. | *"Our ingestion pipeline extracts text, cleans chunks, and indexes 1536-dimensional vector embeddings into pgvector while extracting key concepts."* |
+| **6. Ask AI Tutor** | Switch to **AI Tutor Tab** | Type query: *"Explain how Gradient Descent optimizes weights in linear regression."* Click Send. | *"Let's consult the AI Tutor. The tutor uses grounded RAG with Server-Sent Events for streaming."* |
+| **7. Grounded Answer + Citation** | Review Tutor Response | Highlight the response streaming in, and click the source badges: `[Source: lecture_01.pdf — Page 4]`. | *"Notice the response is strictly grounded in our uploaded material, complete with page citations and similarity confidence."* |
+| **8. Unsupported Question Handling** | Test Guardrail | Type query: *"How do I bake sourdough bread at home?"* | *"Watch our low-evidence guardrail in action. When similarity falls below 0.60, the tutor halts and refuses to hallucinate, politely asking for relevant materials."* |
+| **9. Adaptive Quiz** | Switch to **Quiz Tab** | Click **"Start Adaptive Quiz"** (3 questions). | *"Next, we evaluate understanding. The adaptive engine queries our concept mastery store and dynamically selects questions targeting our weakest concepts."* |
+| **10. Open-Ended & MCQ Assessment** | Answer Questions | Select MCQ option, type a brief answer for open-ended question. Click Submit. | *"We answer the questions. The system grades MCQs instantly and applies rubric scoring to open-ended explanations."* |
+| **11. Mastery & Growth** | Switch to **Mastery Tab** | Show the interactive concept mastery bars and trend badges (`IMPROVING`, `STABLE`, `ATTENTION`). | *"Our understanding is quantified through Exponential Moving Average (EMA) mastery tracking across all extracted concepts."* |
+| **12. Analytics & Next Action Recommendation** | Switch to **Overview Tab** | Point to the **Active Recommendation Card** (e.g., *"Focus on Overfitting & Regularization"* with CTA). | *"The system continuously answers 'What should I do next?' by generating targeted next-action recommendations based on our mistake patterns."* |
+| **13. Admin Dashboard** | Click **"Admin"** in nav | Show `/admin` with registered users, active projects, and real-time AI observability telemetry (token usage, latency, spend). | *"Finally, the Admin Dashboard provides comprehensive observability into users, system health, and token economics across all AI interactions. Thank you!"* |
