@@ -1,220 +1,87 @@
-# System Architecture Specification
-## The Lenny Growth Assistant
+# System Architecture Specification: AI Study Companion
 
-**Document Version:** 1.0  
-**Author:** Forward Deployed Engineer  
-**Status:** Approved for Implementation  
-
----
-
-## 1. System Topology Overview
-
-The Lenny Growth Assistant is designed as a modular, containerized 3-tier system:
-
-```
-                  +----------------------------------------------+
-                  |               Client Browser                 |
-                  |  (Next.js / React + Tailwind CSS + iframe)   |
-                  +----------------------------------------------+
-                                       |   ^
-                    HTTP / SSE (Stream)|   |
-                                       v   |
-                  +----------------------------------------------+
-                  |             FastAPI ASGI Server              |
-                  |  - Session / Chat / Artifact REST Endpoints  |
-                  |  - SSE Token Streaming Engine                |
-                  |  - Dynamic Provider Dispatcher               |
-                  +----------------------------------------------+
-                         /         |              \
-                        /          |               \
-                       v           v                v
-         +-----------------+  +-----------------+  +----------------------+
-         | pgvector / DB   |  | Ollama (Local)  |  | Cloud Providers      |
-         | PostgreSQL 16   |  | llama3.2:3b     |  | - Anthropic Claude   |
-         | + pgvector HNSW |  | (localhost:     |  | - OpenAI GPT-4o      |
-         | (or SQLite fb)  |  |  11434)         |  | (API Fallback)       |
-         +-----------------+  +-----------------+  +----------------------+
-```
+**System Name:** AI Study Companion  
+**Architecture Pattern:** Clean Modular Hexagonal Architecture with Strict Tenant Isolation  
+**Runtime:** Next.js 14 (Frontend) + FastAPI ASGI (Backend) + PostgreSQL 16 with pgvector + Redis  
 
 ---
 
-## 2. Database Schema (PostgreSQL + pgvector)
+## 1. High-Level Architecture Overview
 
-The database utilizes standard relational tables for session persistence and the `pgvector` extension for sub-second semantic retrieval.
-
-```sql
--- Enable vector extension
-CREATE EXTENSION IF NOT EXISTS vector;
-
--- 1. Chat Sessions
-CREATE TABLE sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title VARCHAR(255) NOT NULL DEFAULT 'New Conversation',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Chat Messages
-CREATE TABLE messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    role VARCHAR(32) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
-    content TEXT NOT NULL,
-    sources JSONB DEFAULT '[]'::jsonb, -- Array of cited transcript chunks
-    provider VARCHAR(64) NOT NULL DEFAULT 'ollama',
-    model VARCHAR(64) NOT NULL DEFAULT 'llama3.2:3b',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_messages_session ON messages(session_id);
-
--- 3. Generated Artifacts
-CREATE TABLE artifacts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    artifact_type VARCHAR(32) NOT NULL CHECK (artifact_type IN ('markdown', 'html')),
-    content TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_artifacts_message ON artifacts(message_id);
-
--- 4. Transcript Chunks with pgvector
-CREATE TABLE transcript_chunks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    episode_slug VARCHAR(255) NOT NULL,
-    episode_title VARCHAR(512) NOT NULL,
-    guest_name VARCHAR(255) NOT NULL,
-    timestamp_ref VARCHAR(64),          -- e.g. "00:14:22" or topic segment
-    chunk_index INT NOT NULL,
-    chunk_text TEXT NOT NULL,
-    token_count INT NOT NULL,
-    embedding vector(384) NOT NULL      -- Matches all-MiniLM-L6-v2 (384-d)
-);
-
--- High-performance HNSW index for cosine distance
-CREATE INDEX idx_transcript_chunks_hnsw 
-ON transcript_chunks 
-USING hnsw (embedding vector_cosine_ops)
-WITH (m = 16, ef_construction = 64);
-```
-
-### Automatic SQLite Fallback Mode
-When running in local development environments without an active Docker daemon or PostgreSQL server, the backend transparently initializes an embedded SQLite database (`lenny_assistant.db`) and evaluates cosine similarity in-memory using vectorized NumPy computations, ensuring a zero-friction evaluation path.
-
----
-
-## 3. Ingestion & Retrieval Pipeline
+The system is architected across decoupled layers ensuring zero leakage between learning projects, real-time citation tracking, and continuous mastery estimation:
 
 ```
-[Raw Transcript Files]
-        |
-        v
-[Loader & Metadata Parser] -> Guest, Title, Date, Speaker Timestamps
-        |
-        v
-[Recursive Chunker]       -> 500-800 tokens, 100-token overlap, speaker boundary preservation
-        |
-        v
-[Embedding Model]         -> 384-dimensional dense vectors (all-MiniLM-L6-v2 / Ollama)
-        |
-        v
-[pgvector / HNSW Store]   -> Indexed for fast cosine similarity
-```
-
-### Retrieval Query Execution
-1. Incoming user query is vectorized via the embedding model.
-2. Cosine similarity query is executed against `transcript_chunks`:
-   $$\text{similarity} = 1 - (\text{embedding} \Leftrightarrow \vec{q})$$
-3. Results are filtered by threshold ($\ge 0.60$) and sorted descending, taking the top $K=5$ segments.
-4. If no segments pass the threshold, the system prompt triggers an out-of-context fallback:
-   > *"I do not have sufficient information in Lenny's podcast archive to answer this."*
-
----
-
-## 4. Multi-Provider LLM & Routing Layer
-
-```
-                        [Client Chat Request]
-                                  |
-                                  v
-                    [Provider Factory / Router]
-                     /                       \
-        (mode = 'ollama')                 (mode = 'claude' / 'openai')
-                  v                                    v
-       [OllamaProvider Driver]             [CloudProvider Driver]
-       - Base URL: localhost:11434         - Anthropic Claude 3.5 Sonnet
-       - Model: llama3.2:3b                - OpenAI GPT-4o / GPT-4o-mini
-       - SSE Stream Generator              - SSE Stream Generator
-                  \                                   /
-                   v                                 v
-                     [Unified Async Token Stream]
-```
-
-### Contract: `BaseLLMProvider`
-All providers implement an abstract async generator:
-```python
-class BaseLLMProvider(ABC):
-    @abstractmethod
-    async def generate_response(
-        self,
-        messages: List[Dict[str, str]],
-        system_prompt: str,
-        temperature: float = 0.3
-    ) -> AsyncGenerator[str, None]:
-        pass
+                                  [ Client Browser ]
+                     Next.js 14 (App Router, Tailwind, Shadcn/UI)
+                                          │
+                                          │ HTTP / SSE Token Stream
+                                          ▼
+                                 [ FastAPI Application ]
+  ┌───────────────────────────────────────┼──────────────────────────────────────┐
+  │                                       │                                      │
+  ▼                                       ▼                                      ▼
+[ Learning & Auth Module ]       [ AI & Retrieval Module ]         [ Assessment & Mastery ]
+- JWT Bearer Auth                - Grounded RAG with Citations     - Adaptive Question Gen
+- Space > Project Hierarchy      - Low-Evidence Refusal (<0.60)    - Open-Ended Rubric Eval
+- Multi-Tenant Ownership Gates   - Prompt-Injection Boundaries     - EMA Mastery Tracking
+  │                                       │                                      │
+  └───────────────────────────────────────┼──────────────────────────────────────┘
+                                          │
+                   ┌──────────────────────┴──────────────────────┐
+                   ▼                                             ▼
+       [ PostgreSQL 16 + pgvector ]                     [ Redis In-Memory ]
+       - 1536-dim Vector Embeddings                     - Job queues & locks
+       - Zero-join Project Indexing                     - Pub/Sub events
+       - Immutable Event Log                            - Fast caching
+       - Strict Fail-Loud Requirement
 ```
 
 ---
 
-## 5. Dedicated Ship 30 for 30 Skill Engine
+## 2. Core Relational & Vector Schema
 
-The `ship30_writer` skill encodes the proven atomic essay mechanics:
-1. **The Headline & The Hook:** Direct promise, counterintuitive hook, speed to value.
-2. **The Rhythm (1-3-1 Cadence):** One single punchy sentence, followed by a short 3-sentence explanatory block, closed with a single takeaway line.
-3. **Skimmability:** Markdown H2/H3 subheadings, bold visual anchors on the first 2–4 words of every bullet point.
-4. **Target Volume:** Approximately 1,250 words structured into 4 distinct phases:
-   - *Phase 1: The Trap* (Why traditional advice fails).
-   - *Phase 2: The Mental Model* (The guest's proprietary framework).
-   - *Phase 3: The 4-Step Playbook* (Exact step-by-step execution).
-   - *Phase 4: The Golden Rule* (Summary checklist for tomorrow morning).
-5. **Grounding:** Quotes, frameworks, and metrics strictly attributed to podcast guests.
+All project-scoped entities enforce a direct `project_id` foreign key index to guarantee query isolation without complex joins.
 
----
-
-## 6. Artifact Generation & Security Isolation
-
-### Tag Protocol
-When generating standalone documents or code, the model wraps them in structured XML tags:
-```xml
-<artifact type="html" title="Interactive PLG ROI Calculator">
-<!DOCTYPE html>
-<html>
-...
-</html>
-</artifact>
-```
-or
-```xml
-<artifact type="markdown" title="LNO Prioritization Executive Brief">
-# Executive Brief
-...
-</artifact>
-```
-
-### Security Sandboxing
-1. **DOMPurify Sanitization:** HTML strings are sanitized to eliminate malicious vector scripts while preserving inline CSS styling and layout scripts.
-2. **Iframe Sandboxing:** Rendered inside `<iframe sandbox="allow-scripts" srcdoc="..."></iframe>`.
-   - **Crucial Security Decision:** The `allow-same-origin` token is **omitted**.
-   - **Why:** Without `allow-same-origin`, the untrusted iframe executes scripts in an isolated, unique origin. It cannot access `window.parent`, cannot read `localStorage`/cookies, and cannot make authenticated requests to the host application's backend.
+### Key Domain Models
+1. **`User`**: `id`, `email`, `hashed_password` (bcrypt), `name`, `role` (`user`, `admin`).
+2. **`Space`**: Top-level learning namespace (`user_id`, `name`, `description`).
+3. **`Project`**: Core study boundary (`space_id`, `user_id`, `name`, `learning_goal`).
+4. **`Material`**: Uploaded learning resource (`project_id`, `filename`, `file_path`, `status`, `page_count`).
+5. **`DocumentChunk`**: Semantic text segment with 1536-dimensional vector embedding (`material_id`, `project_id`, `page_number`, `content`, `embedding Vector(1536)`).
+6. **`Concept`**: Knowledge atom extracted from materials (`project_id`, `name`, `description`).
+7. **`ConceptMastery`**: Real-time mastery state (`project_id`, `user_id`, `concept_id`, `mastery_score [0.0-1.0]`, `confidence_level`, `trend [IMPROVING|STABLE|ATTENTION]`).
+8. **`MasterySnapshot`**: Historical timestamped mastery point for progress graphing.
+9. **`Conversation` & `Message`**: Dialogue history with JSON citation provenance tags (`filename`, `page_number`, `similarity`).
+10. **`QuizSession`, `Question`, `Answer`**: Diagnostic assessments with rubric evaluations.
+11. **`LearningContext`**: Persistent learner summary (strengths, weak concepts, repeated mistakes).
+12. **`LearningEvent`**: Immutable event stream with unique `idempotency_key`.
+13. **`AIRequestLog`**: Telemetry capturing prompt tokens, completion tokens, latency, cost USD, and status (`SUCCESS`, `REFUSED_LOW_EVIDENCE`).
+14. **`Recommendation`**: Actionable next step answering *"What should I do next?"*.
 
 ---
 
-## 7. Observability, Logging & Resilience
+## 3. Grounded Retrieval & Guardrail Mechanics
 
-- **Structured JSON Logging:** Every request is stamped with a unique `request_id`, execution duration, provider name, and token count.
-- **Resilience Strategy:**
-  - *Ollama Unavailable:* If the local Ollama daemon is offline or returns a connection error, the backend yields a descriptive status message guiding the user to start `ollama serve` or run `ollama pull llama3.2:3b`.
-  - *Cloud Key Missing:* If the user selects Claude or OpenAI without providing an API key, the system falls back to Ollama or alerts the user with a 400 error.
-  - *Database Failure:* If Postgres is down, SQLite fallback activates seamlessly without crashing the ASGI worker.
+1. **Embedding Generation**: User query embedded to 1536 dimensions.
+2. **Project-Scoped Vector Search**:
+   $$\text{similarity} = 1.0 - \text{cosine\_distance}(\mathbf{v}_{\text{query}}, \mathbf{v}_{\text{chunk}})$$
+   filtered strictly by `project_id`.
+3. **Low-Evidence Refusal Guardrail**:
+   - If $\max(\text{similarity}) < 0.60$ or no chunks match:
+     Refusal triggered: *"I do not have sufficient information in your uploaded project materials to answer this question reliably."*
+   - Logged with `status="REFUSED_LOW_EVIDENCE"`.
+4. **Provenance Citations**:
+   - Injected into system prompt context with tags: `[Source: {filename} — Page {page_number}]`.
+   - Rendered in frontend as interactive badge chips.
+
+---
+
+## 4. Adaptive Assessment & EMA Mastery Updates
+
+- **Target Concept Selection**: Prioritizes concepts tagged as `ATTENTION` or score $< 0.50$ (60% weight).
+- **Exponential Moving Average (EMA)** update formula:
+  $$\text{Mastery}_{\text{new}} = 0.3 \cdot \text{Score}_{\text{new}} + 0.7 \cdot \text{Mastery}_{\text{prev}}$$
+- **Trend Classification**:
+  - $\Delta \ge +0.10 \implies \text{IMPROVING}$
+  - $\text{Score} < 0.50 \text{ or } \Delta \le -0.10 \implies \text{ATTENTION}$
+  - Otherwise $\implies \text{STABLE}$

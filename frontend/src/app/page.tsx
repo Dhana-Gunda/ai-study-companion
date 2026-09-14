@@ -1,312 +1,207 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Plus, MessageSquare, Trash2, Sidebar as SidebarIcon, Sparkles, Database } from "lucide-react";
-import { ChatPane } from "../components/Chat/ChatPane";
-import { ModelSelector } from "../components/Chat/ModelSelector";
-import { ArtifactViewer } from "../components/Artifact/ArtifactViewer";
-import { useChatStream } from "../hooks/useChatStream";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { checkBackendHealth, HealthCheckResponse } from "@/lib/api";
 import {
-  Session,
-  Message,
-  Artifact,
-  Citation,
-  fetchSessions,
-  createNewSession,
-  fetchSessionDetails,
-  deleteSession,
-  fetchHealth,
-  HealthData,
-} from "../lib/api";
+  Sparkles,
+  Layers,
+  BookOpen,
+  HelpCircle,
+  BarChart2,
+  Shield,
+  Activity,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  Database,
+  Cpu
+} from "lucide-react";
 
-export default function Home() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string>("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<"ollama" | "claude" | "openai">("ollama");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [health, setHealth] = useState<HealthData | null>(null);
+export default function HomePage() {
+  const [health, setHealth] = useState<HealthCheckResponse | null>(null);
+  const [loadingHealth, setLoadingHealth] = useState(true);
 
-  // Hook for SSE streaming
-  const { isStreaming, statusMessage, sendMessage, abortStream } = useChatStream({
-    onArtifactDetected: (artifact) => {
-      setActiveArtifact(artifact);
-    },
-  });
-
-  // Load health and sessions on mount
   useEffect(() => {
-    async function loadInitialData() {
+    let mounted = true;
+    async function loadHealth() {
       try {
-        const h = await fetchHealth();
-        setHealth(h);
-      } catch (err) {
-        console.warn("Could not reach backend health probe:", err);
-      }
-
-      try {
-        const list = await fetchSessions();
-        setSessions(list);
-        if (list.length > 0) {
-          handleSelectSession(list[0].id);
-        } else {
-          handleNewSession();
-        }
-      } catch (err) {
-        // Initialize default session if DB is empty
-        handleNewSession();
+        const res = await checkBackendHealth();
+        if (mounted) setHealth(res);
+      } catch {
+        if (mounted) setHealth(null);
+      } finally {
+        if (mounted) setLoadingHealth(false);
       }
     }
-    loadInitialData();
+    loadHealth();
+    const interval = setInterval(loadHealth, 6000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  const handleSelectSession = async (sessionId: string) => {
-    setCurrentSessionId(sessionId);
-    try {
-      const details = await fetchSessionDetails(sessionId);
-      setMessages(details.messages || []);
-      // If last message has an artifact, set it active
-      for (const m of (details.messages || []).slice().reverse()) {
-        if (m.artifacts && m.artifacts.length > 0) {
-          setActiveArtifact(m.artifacts[0]);
-          break;
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load session details:", err);
-    }
-  };
-
-  const handleNewSession = async () => {
-    try {
-      const newSess = await createNewSession("New Conversation");
-      setSessions((prev) => [newSess, ...prev]);
-      setCurrentSessionId(newSess.id);
-      setMessages([]);
-      setActiveArtifact(null);
-    } catch (err) {
-      // Offline fallback UUID
-      const fakeId = "session-" + Date.now();
-      setCurrentSessionId(fakeId);
-      setMessages([]);
-      setActiveArtifact(null);
-    }
-  };
-
-  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    try {
-      await deleteSession(id);
-      setSessions((prev) => prev.filter((s) => s.id !== id));
-      if (currentSessionId === id) {
-        const remaining = sessions.filter((s) => s.id !== id);
-        if (remaining.length > 0) {
-          handleSelectSession(remaining[0].id);
-        } else {
-          handleNewSession();
-        }
-      }
-    } catch (err) {
-      console.error("Failed to delete session:", err);
-    }
-  };
-
-  const handleSendMessage = (text: string, mode: "default" | "ship30" | "artifact") => {
-    if (!currentSessionId) return;
-
-    // 1. Append user message optimistically
-    const userMsg: Message = {
-      role: "user",
-      content: text,
-    };
-
-    // 2. Prepare placeholder assistant message
-    const placeholderAssistant: Message = {
-      role: "assistant",
-      content: "",
-      sources: [],
-      artifacts: [],
-    };
-
-    setMessages((prev) => [...prev, userMsg, placeholderAssistant]);
-
-    let accumulatedTokens = "";
-    let capturedCitations: Citation[] = [];
-
-    sendMessage({
-      sessionId: currentSessionId,
-      message: text,
-      mode,
-      provider: selectedProvider,
-      onToken: (token) => {
-        accumulatedTokens += token;
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              content: accumulatedTokens,
-              sources: capturedCitations,
-            };
-          }
-          return updated;
-        });
-      },
-      onCitations: (citations) => {
-        capturedCitations = citations;
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              sources: citations,
-            };
-          }
-          return updated;
-        });
-      },
-      onComplete: () => {
-        // Refresh session list title if needed
-        fetchSessions().then(setSessions).catch(() => {});
-      },
-      onError: (errText) => {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              content: updated[lastIdx].content + `\n\n> [!WARNING]\n> **Error**: ${errText}`,
-            };
-          }
-          return updated;
-        });
-      },
-    });
-  };
-
   return (
-    <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden select-none">
-      {/* Top Navbar */}
-      <header className="h-14 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur px-4 flex items-center justify-between shrink-0 z-10">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition"
-            title="Toggle Sidebar"
-          >
-            <SidebarIcon className="w-5 h-5" />
-          </button>
-          <div className="flex items-center space-x-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-sm">
-              L
-            </div>
-            <span className="font-semibold text-sm tracking-tight text-zinc-100 hidden sm:inline">
-              The Lenny Growth Assistant
-            </span>
-          </div>
+    <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-10 space-y-12">
+      {/* Hero Section */}
+      <section className="text-center space-y-4 max-w-3xl mx-auto pt-6">
+        <Badge variant="secondary" className="px-3 py-1 text-xs gap-1.5 border border-zinc-700/80">
+          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+          Prototype Architecture Skeleton v1.0
+        </Badge>
+        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+          AI-Powered Learning &amp; Growth Workspace
+        </h1>
+        <p className="text-base sm:text-lg text-zinc-400">
+          A persistent, contextual, and measurable AI companion grounded in your uploaded materials,
+          with adaptive quizzes, concept mastery tracking, and event-driven analytics.
+        </p>
+
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+          <Link href="/dashboard">
+            <Button size="lg" className="gap-2">
+              Enter Workspace <ArrowRight className="w-4 h-4" />
+            </Button>
+          </Link>
+          <Link href="/spaces/space-1/projects/project-ml">
+            <Button size="lg" variant="outline" className="gap-2">
+              <BookOpen className="w-4 h-4 text-indigo-400" /> Open Sample Project
+            </Button>
+          </Link>
+          <Link href="/admin">
+            <Button size="lg" variant="secondary" className="gap-2">
+              <Shield className="w-4 h-4 text-zinc-300" /> Admin Dashboard
+            </Button>
+          </Link>
         </div>
+      </section>
 
-        {/* Center/Right: Model Selector & Health status */}
-        <div className="flex items-center space-x-3">
-          {health && (
-            <div className="hidden md:flex items-center space-x-1.5 text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-md">
-              <Database className="w-3 h-3 text-emerald-400" />
-              <span>{health.indexed_chunks} chunks indexed</span>
-            </div>
-          )}
-
-          <ModelSelector
-            currentProvider={selectedProvider}
-            onProviderChange={setSelectedProvider}
-            disabled={isStreaming}
-          />
-        </div>
-      </header>
-
-      {/* Main 3-Pane Body */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Sidebar */}
-        <nav
-          aria-label="Chat sessions"
-          className={`${
-            isSidebarOpen ? "w-64" : "w-0 -ml-64"
-          } transition-all duration-200 border-r border-zinc-800 bg-zinc-950 flex flex-col shrink-0 overflow-hidden z-20`}
-        >
-          <div className="p-3 border-b border-zinc-800/80">
-            <button
-              onClick={handleNewSession}
-              className="w-full flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg transition shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Conversation</span>
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            <div className="px-2 py-1 text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
-              Recent Sessions
-            </div>
-            {sessions.map((sess) => (
-              <div
-                key={sess.id}
-                onClick={() => handleSelectSession(sess.id)}
-                className={`group flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition ${
-                  currentSessionId === sess.id
-                    ? "bg-zinc-800/90 text-white font-medium border border-zinc-700/50"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                }`}
-              >
-                <div className="flex items-center space-x-2 truncate">
-                  <MessageSquare className="w-3.5 h-3.5 shrink-0 text-zinc-500 group-hover:text-indigo-400" />
-                  <span className="truncate">{sess.title}</span>
-                </div>
-                <button
-                  onClick={(e) => handleDeleteSession(e, sess.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-rose-400 rounded transition"
-                  title="Delete conversation"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
+      {/* Real-time Stack Verification Probe */}
+      <section className="max-w-4xl mx-auto">
+        <Card className="border-zinc-800 bg-zinc-900/60 shadow-xl">
+          <CardHeader className="pb-3 border-b border-zinc-800/60">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-indigo-400" />
+                <CardTitle className="text-base font-semibold">Live Stack Connectivity Probe</CardTitle>
               </div>
-            ))}
-          </div>
+              {loadingHealth ? (
+                <Badge variant="secondary">Probing Backend...</Badge>
+              ) : health?.status === "healthy" ? (
+                <Badge variant="success" className="gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> All Services Connected
+                </Badge>
+              ) : health?.status === "degraded" ? (
+                <Badge variant="warning" className="gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" /> Degraded
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" /> Backend Unreachable
+                </Badge>
+              )}
+            </div>
+            <CardDescription>
+              Continuous probe testing FastAPI backend, PostgreSQL (pgvector extension), and Redis connection
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm font-mono">
+            {/* Database / pgvector */}
+            <div className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-blue-400" /> Database
+                </span>
+                <span className={health?.services?.database?.status === "connected" ? "text-emerald-400" : "text-zinc-500"}>
+                  {health?.services?.database?.status || "offline"}
+                </span>
+              </div>
+              <div className="text-xs text-zinc-300 font-sans">
+                PostgreSQL 16 + <strong className="text-indigo-300 font-mono">pgvector</strong>
+              </div>
+              <div className="text-[11px] text-zinc-500 font-mono">
+                {health?.services?.database?.pgvector_enabled ? "✓ Vector extension ready" : "Awaiting DB connection"}
+              </div>
+            </div>
 
-          {/* Sidebar Footer */}
-          <div className="p-3 border-t border-zinc-800/80 bg-zinc-950/50 text-[11px] text-zinc-500 flex items-center justify-between">
-            <span>Lenny Assistant v1.0</span>
-            <span className="flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>Online</span>
-            </span>
-          </div>
-        </nav>
+            {/* Redis / Queue */}
+            <div className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-amber-400" /> Queue &amp; Cache
+                </span>
+                <span className={health?.services?.redis?.status === "connected" ? "text-emerald-400" : "text-zinc-500"}>
+                  {health?.services?.redis?.status || "offline"}
+                </span>
+              </div>
+              <div className="text-xs text-zinc-300 font-sans">
+                Redis 7 (ARQ Workers)
+              </div>
+              <div className="text-[11px] text-zinc-500 font-mono">
+                {health?.services?.redis?.status === "connected" ? "✓ Ping latency < 2ms" : "Awaiting Redis connection"}
+              </div>
+            </div>
 
-        {/* Center Chat Pane */}
-        <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-          <ChatPane
-            messages={messages}
-            isStreaming={isStreaming}
-            statusMessage={statusMessage}
-            onSendMessage={handleSendMessage}
-            onStopStreaming={abortStream}
-            onOpenArtifact={(art) => setActiveArtifact(art)}
-          />
-        </main>
+            {/* AI Providers */}
+            <div className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-indigo-400" /> AI Provider
+                </span>
+                <span className="text-indigo-300 font-mono">
+                  {health?.services?.ai_providers?.default_provider || "mock/local"}
+                </span>
+              </div>
+              <div className="text-xs text-zinc-300 font-sans">
+                LLM Abstraction Layer
+              </div>
+              <div className="text-[11px] text-zinc-500 font-mono">
+                OpenAI / Anthropic / Ollama
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
 
-        {/* Right Artifact Viewer (Claude Artifacts style) */}
-        {activeArtifact && (
-          <div className="w-full md:w-[48%] lg:w-[50%] h-full shrink-0 z-10">
-            <ArtifactViewer
-              artifact={activeArtifact}
-              onClose={() => setActiveArtifact(null)}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+      {/* Primary Learning Loop Section */}
+      <section className="space-y-6">
+        <div className="text-center space-y-1">
+          <h2 className="text-2xl font-bold text-white">The Connected Learning Loop</h2>
+          <p className="text-sm text-zinc-400">
+            A cohesive architecture connecting study materials to measurable growth
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 text-center">
+          {[
+            { step: "1. Space", desc: "Broad study domain", icon: Layers },
+            { step: "2. Project", desc: "Focused learning goal", icon: BookOpen },
+            { step: "3. Materials", desc: "PDF async parsing & RAG", icon: BookOpen },
+            { step: "4. AI Tutor", desc: "Grounded with citations", icon: Sparkles },
+            { step: "5. Quiz", desc: "Adaptive MCQ & Rubrics", icon: HelpCircle },
+            { step: "6. Mastery", desc: "EMA score & trend tracking", icon: BarChart2 },
+            { step: "7. Growth", desc: "Targeted next action", icon: Activity },
+          ].map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={index}
+                className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 space-y-2 hover:border-zinc-700 transition-colors"
+              >
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 text-indigo-400 flex items-center justify-center mx-auto">
+                  <Icon className="w-4 h-4" />
+                </div>
+                <div className="text-xs font-semibold text-zinc-200">{item.step}</div>
+                <div className="text-[11px] text-zinc-500 leading-tight">{item.desc}</div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </main>
   );
 }

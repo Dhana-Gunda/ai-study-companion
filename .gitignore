@@ -13,6 +13,11 @@ __pycache__/
 # Environment
 .env
 .env.local
+backend/.env
+backend/storage/
+*.db
+powershell.cmd
+*/powershell.cmd
 
 # VS Code
 .vscode/

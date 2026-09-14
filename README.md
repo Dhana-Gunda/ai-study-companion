@@ -1,194 +1,145 @@
-# The Lenny Growth Assistant
-> Enterprise-grade, full-stack Retrieval-Augmented Generation (RAG) assistant unlocking operational product and growth wisdom from **Lenny’s Podcast** transcripts.
+# AI Study Companion
+> **AI-Powered Learning & Growth Workspace**  
+> Full-Stack Prototype Architecture with Grounded AI Tutor, Adaptive Assessments, Concept Mastery, and Admin Observability.
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-009688.svg?style=flat-square&logo=FastAPI&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-14.2.3-black.svg?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16_with_pgvector-4169E1.svg?style=flat-square&logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
-[![Ollama](https://img.shields.io/badge/Ollama-Local_Inference-white.svg?style=flat-square&logo=ollama&logoColor=black)](https://ollama.com)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Redis](https://img.shields.io/badge/Redis-7.0_Alpine-DC382D.svg?style=flat-square&logo=redis&logoColor=white)](https://redis.io)
 
 ---
 
-## 1. Overview & Key Capabilities
+## 1. Product Overview
 
-The Lenny Growth Assistant empowers Product Managers, Growth Leads, and Founders to extract actionable frameworks from over 200+ podcast interviews with tech luminaries (e.g. Shreyas Doshi, Elena Verna, Brian Chesky).
+**AI Study Companion** is a persistent, contextual, and measurable learning workspace designed to help users understand, practice, measure, and continuously improve a skill or area of knowledge.
 
-### Core Features
-1. **Grounded Question Answering:** Strictly retrieves relevant transcript dialogue using vector cosine similarity. Every factual assertion cites the guest name, episode title, and timestamp.
-2. **Missing Information Guardrails:** Out-of-domain queries trigger a graceful rejection statement (*"I do not have sufficient information in Lenny's podcast archive to answer this"*), preventing LLM hallucinations.
-3. **Dedicated Ship 30 for 30 Essay Skill:** Transforms insights into a structured, ~1,250-word essay following the 1-3-1 sentence cadence, bold bullet anchors, and tactical checklists.
-4. **Claude-Style In-App Artifact Viewer:** Renders Markdown briefs or complete interactive HTML/CSS/JS widgets side-by-side with the chat.
-5. **Secure Sandboxing:** Untrusted generated HTML is isolated in an `<iframe>` configured with `sandbox="allow-scripts"` (strictly omitting `allow-same-origin`) and pre-sanitized with DOMPurify.
-6. **Dynamic Dual-Engine Model Switching:** Run locally using **Ollama** (`llama3.2:3b`, `llama3.1:8b`, `mistral:7b`) for zero-cost private demos, or toggle in real-time to **Anthropic Claude 3.5 Sonnet** or **OpenAI GPT-4o** without restarting the server.
-7. **Zero-Friction Fallback:** Primary persistence in PostgreSQL with `pgvector`; automatically falls back to async SQLite with in-memory vector matching for zero-dependency local runs.
+The platform continuously answers three fundamental questions for the learner:
+1. **What am I learning?** (Spaces, Projects, goals, learning materials, extracted concepts)
+2. **How well am I learning it?** (Adaptive quizzes, open-ended rubric evaluations, mistake tracking, concept mastery)
+3. **What should I do next?** (Growth trends, targeted material review, and personalized next-action recommendations)
 
 ---
 
 ## 2. System Architecture
 
 ```
-                                [Browser UI]
-                       (Next.js 14 + Tailwind CSS)
-                       /                        \
-          [Central Chat Pane]              [Artifact Viewer]
-          (Streaming SSE Tokens)           (Sandboxed Iframe)
-                       \                        /
-                        v                      v
-                  +-----------------------------------+
-                  |        FastAPI ASGI Backend       |
-                  |  - Sessions, Chat & Artifact APIs |
-                  |  - Hybrid Vector Retriever        |
-                  |  - Ship 30 for 30 Skill Engine    |
-                  +-----------------------------------+
-                         /          |             \
-                        /           |              \
-                       v            v               v
-           +----------------+  +-------------+  +--------------------+
-           |  PostgreSQL 16 |  |   Ollama    |  |  Cloud Providers   |
-           |   + pgvector   |  | (llama3.2)  |  |  - Claude 3.5      |
-           |  (or SQLite fb)|  | (Local 3B)  |  |  - OpenAI GPT-4o   |
-           +----------------+  +-------------+  +--------------------+
+Frontend (Next.js 14 App Router + Tailwind + shadcn/ui)
+│  ├── User Home & Spaces/Projects Hub
+│  ├── Grounded AI Tutor (SSE streaming + page citations)
+│  ├── Adaptive Quiz Runner (MCQ + open-ended rubric evaluation)
+│  ├── Concept Mastery & Growth Trajectory Dashboard
+│  └── Platform Admin & AI Observability Dashboard
+│
+▼ (HTTP / SSE)
+FastAPI Backend (Application & Security Gateway)
+│  ├── Security & Multi-Tenant Project Isolation Middleware
+│  └── API v1 Routers (/auth, /spaces, /projects, /materials, /tutor, /quizzes, /mastery, /admin, /health)
+│
+▼
+Business Logic Modules & Background Workers (Redis + ARQ)
+│  ├── Learning Module: Spaces, Projects, Materials lifecycle
+│  ├── Knowledge Module: PDF parsing (PyMuPDF), chunking, pgvector retrieval
+│  ├── AI Module: LLM abstraction (OpenAI / Anthropic / Ollama), Context Composer, Refusal Guardrail
+│  ├── Assessment Module: Adaptive question selector, Rubric grading engine
+│  ├── Mastery & Growth: EMA mastery computation, trend analysis, next-action engine
+│  ├── Analytics Module: Immutable event bus, project & global statistics
+│  └── Admin Module: AI token spend, latency percentiles, system health
+│
+▼
+Data Layer
+├── PostgreSQL 16 (Relational: users, spaces, projects, quizzes, events)
+├── pgvector Extension (Vector Store: document_chunks with 1536-dim embeddings)
+├── Persistent Learning Context Store (JSONB learner state per project)
+├── Redis 7 (Background task queue & session caching)
+└── Storage (Local filesystem / S3-compatible raw PDF storage)
 ```
-
-For complete architectural details and database schemas, see [`docs/architecture.md`](docs/architecture.md).  
-For product strategy and discovery brief, see [`docs/PRD.md`](docs/PRD.md).  
-For UI/UX design rationale and interaction states, see [`docs/design.md`](docs/design.md).  
 
 ---
 
 ## 3. Quickstart & Deployment
 
-### Option A: One-Command Startup with Docker Compose (Recommended)
+### Option A: Complete Stack via Docker Compose (Recommended)
 
-Ensure Docker Desktop is running, then execute:
+To start PostgreSQL 16 (with `pgvector` enabled), Redis, FastAPI backend, and Next.js frontend:
 
 ```bash
-# 1. Clone or navigate to the repository
+# 1. Clone repository and navigate to project root
 cd newProject
 
-# 2. Copy environment template
+# 2. Setup your environment variables
 cp .env.example .env
 
-# 3. Launch PostgreSQL (with pgvector), Backend, and Frontend
+# 3. Launch all services
 docker-compose up --build
 ```
 
-- **Frontend:** Visit `http://localhost:3000`
-- **Backend API Docs:** Visit `http://localhost:8000/docs`
-- **Health Probe:** Visit `http://localhost:8000/api/health`
+- **Frontend:** [http://localhost:3000](http://localhost:3000)
+- **Backend API & Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Stack Health Probe:** [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
 
 ---
 
-### Option B: Local Development (Without Docker)
-
-You can run the application directly on your machine. The backend will automatically use its embedded SQLite database fallback if PostgreSQL is not active.
+### Option B: Local Development (Step-by-Step)
 
 #### Prerequisites
 - **Python 3.11+**
 - **Node.js 18+**
-- **Ollama** installed and running:
-  ```bash
-  ollama serve
-  ollama pull llama3.2:3b
-  ```
+- **Docker** (for Postgres & Redis, or run local instances)
 
-#### 1. Start the Backend
+#### 1. Start Infrastructure (PostgreSQL with pgvector & Redis)
+```bash
+docker-compose up -d db redis
+```
+
+#### 2. Start Backend API
 ```bash
 cd backend
 python -m venv venv
+
 # Windows:
 .\venv\Scripts\activate
 # macOS/Linux:
 source venv/bin/activate
 
 pip install -r requirements.txt
-
-# Ingest bundled seed transcripts into the database:
-python scripts/ingest.py
-
-# Start FastAPI server:
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-#### 2. Start the Frontend
+#### 3. Start Frontend
 In a separate terminal:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Open `http://localhost:3000` in your browser.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 4. Ingesting Transcripts
+## 4. Key Endpoints & Verification
 
-The project comes pre-seeded with high-impact transcripts (Elena Verna on PLG, Shreyas Doshi on the LNO framework, and Brian Chesky on Founder Mode) located in `backend/data/transcripts/`.
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Root API metadata & service links |
+| `GET` | `/api/v1/health` | Deep health probe verifying Postgres, `pgvector`, Redis, and AI providers |
+| `GET` | `/docs` | Interactive Swagger / OpenAPI documentation |
+| `POST` | `/api/v1/spaces` | Create a broad study Space |
+| `POST` | `/api/v1/projects` | Create a focused Project with learning goals |
+| `POST` | `/api/v1/materials/upload` | Upload PDF learning material for async ingestion |
+| `POST` | `/api/v1/tutor/chat` | Grounded chat with citations & low-evidence refusal |
+| `POST` | `/api/v1/quizzes/start` | Start adaptive assessment targeting weak concepts |
+| `GET` | `/api/v1/mastery` | Concept mastery scores & growth trends |
+| `GET` | `/api/v1/admin/ai-metrics` | Telemetry on AI invocations, token usage, latency, and cost |
 
-To re-index or add new transcripts:
+---
+
+## 5. Automated Tests
+
+To run the backend test suite:
 ```bash
 cd backend
-# Optional: Download additional transcripts from GitHub
-python scripts/download_transcripts.py
-
-# Run chunking, vector embedding, and indexer:
-python scripts/ingest.py
+pytest app/tests/ -v
 ```
-
----
-
-## 5. Model Provider Configuration
-
-You can seamlessly switch models in the navigation bar dropdown at any time:
-
-| Provider | Model | Setup Instructions |
-|---|---|---|
-| **Ollama (Local - Mandatory Demo)** | `llama3.2:3b` | Run `ollama run llama3.2:3b` |
-| **Anthropic Claude (Cloud)** | `claude-3-5-sonnet-20241022` | Set `ANTHROPIC_API_KEY=your_key` in `.env` |
-| **OpenAI (Cloud)** | `gpt-4o` | Set `OPENAI_API_KEY=your_key` in `.env` |
-
----
-
-## 6. Running Automated Tests
-
-Run the complete backend test suite using `pytest`:
-
-```bash
-cd backend
-pytest tests/ -v
-```
-
-The test suite validates:
-- `test_api.py`: Health endpoint status, session CRUD, and message serialization.
-- `test_retrieval.py`: Dialogue-aware chunking, embedding generation, cosine similarity, and out-of-domain threshold rejection.
-- `test_providers.py`: Provider dynamic factory, Ship 30 for 30 prompt constraints (1,250 words, 1-3-1 cadence), and artifact XML extraction.
-
----
-
-## 7. Security & Artifact Sandboxing
-
-To satisfy zero-trust security expectations when generating and executing HTML/JS code artifacts:
-1. **Sanitization:** Raw HTML generated by the LLM is sanitized via `DOMPurify` to eliminate malicious vectors.
-2. **Iframe Sandboxing:** Rendered within `<iframe sandbox="allow-scripts">`.
-3. **Origin Isolation:** We **strictly omit** `allow-same-origin`. This forces the browser to treat the iframe execution context as an opaque, isolated `null` origin. Even if malicious JavaScript runs, it cannot access the parent application's DOM, `localStorage`, session cookies, or trigger unauthorized API requests.
-
----
-
-## 8. Troubleshooting & Operational Handoff
-
-| Issue | Cause | Solution |
-|---|---|---|
-| *"Ollama Connection Failed"* in chat | Ollama daemon not running | Run `ollama serve` in a terminal window. |
-| *"Model not found on Ollama"* | Model weights not downloaded | Run `ollama pull llama3.2:3b` (or your configured model). |
-| *"Anthropic API Key Missing"* | Switched to Claude without key in `.env` | Add `ANTHROPIC_API_KEY` to `.env` or switch back to Ollama in the navbar. |
-| Postgres connection refused | Local Postgres not running | No action required! The application automatically switches to SQLite fallback. |
-
----
-
-## 9. Deliverables Directory
-
-- **PRD:** [`docs/PRD.md`](docs/PRD.md)
-- **Architecture Spec:** [`docs/architecture.md`](docs/architecture.md)
-- **Design Spec:** [`docs/design.md`](docs/design.md)
-- **Agent Transcripts & Debug Logs:** [`agent_transcripts/`](agent_transcripts/)
-- **Video Demo Script:** [`demo_script.md`](demo_script.md)
+Tests validate:
+- Deep health check and service connectivity probe
+- Multi-tenant project boundary validation and security gate

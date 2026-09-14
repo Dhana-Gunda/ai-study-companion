@@ -3,17 +3,33 @@ version: '3.8'
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: lenny_postgres
+    container_name: study_companion_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password123
-      POSTGRES_DB: lenny_assistant
+      POSTGRES_DB: study_companion
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d study_companion"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: study_companion_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,27 +38,34 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: lenny_backend
+    container_name: study_companion_backend
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:password123@db:5432/lenny_assistant
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DB_URL: postgresql+asyncpg://postgres:password123@db:5432/study_companion
+      DATABASE_URL: postgresql+asyncpg://postgres:password123@db:5432/study_companion
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: dev-secret-key-change-in-production-12345
+      STORAGE_PATH: /app/storage/materials
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      DEFAULT_PROVIDER: ollama
-      OLLAMA_MODEL: llama3.2:3b
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEFAULT_PROVIDER: ${DEFAULT_PROVIDER:-openai}
+      ENVIRONMENT: development
     ports:
       - "8000:8000"
+    volumes:
+      - storage_data:/app/storage
     depends_on:
       db:
         condition: service_healthy
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      redis:
+        condition: service_healthy
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: lenny_frontend
+    container_name: study_companion_frontend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -52,3 +75,5 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
+  storage_data:
