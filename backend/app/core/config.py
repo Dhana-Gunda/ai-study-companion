@@ -52,8 +52,23 @@ class Settings(BaseSettings):
 
     @property
     def effective_db_url(self) -> str:
-        """Prefers DB_URL if explicitly provided, else DATABASE_URL."""
-        return self.DB_URL if self.DB_URL else self.DATABASE_URL
+        """Prefers DB_URL if explicitly provided, else DATABASE_URL, normalizing for asyncpg."""
+        import re
+        url = (self.DB_URL if self.DB_URL else self.DATABASE_URL).strip()
+        
+        # Ensure postgresql+asyncpg driver prefix
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+        # Remove query params that asyncpg does not support
+        if "channel_binding=" in url:
+            url = re.sub(r"[?&]channel_binding=[^&]+", "", url)
+            if "?" not in url and "&" in url:
+                url = url.replace("&", "?", 1)
+                
+        return url
 
     class Config:
         env_file = ".env"
